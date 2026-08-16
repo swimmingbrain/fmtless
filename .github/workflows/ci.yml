@@ -1,0 +1,55 @@
+name: ci
+
+on:
+  push:
+  pull_request:
+
+jobs:
+  test:
+    name: ${{ matrix.cc }} on ubuntu
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        cc: [gcc, clang]
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - run: pip install pytest
+      - name: build the example
+        run: make demo CC=${{ matrix.cc }}
+      - name: decode what it logs
+        run: make run
+      - name: tests
+        run: make test
+
+  freestanding:
+    name: cortex-m4
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: install the arm toolchain
+        run: sudo apt-get update && sudo apt-get install -y gcc-arm-none-eabi libnewlib-arm-none-eabi
+      - name: it builds without a C library
+        run: |
+          arm-none-eabi-gcc -mcpu=cortex-m4 -mthumb -std=c11 -Os -Wall -Wextra -Werror \
+            -ffreestanding -ffunction-sections -fdata-sections -Iinclude \
+            -c -o /tmp/blink.o examples/cortex-m/blink.c
+      - name: the catalog stays out of the image
+        run: make -C examples/cortex-m compare
+
+  strict:
+    name: warnings are errors
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: gcc, every warning it has
+        run: |
+          gcc -std=c11 -O2 -Wall -Wextra -Wpedantic -Wshadow -Wconversion -Werror \
+            -Iinclude -o /tmp/demo examples/hosted/demo.c
+      - name: clang, the same
+        run: |
+          clang -std=c11 -O2 -Wall -Wextra -Wpedantic -Wshadow -Wconversion -Werror \
+            -Iinclude -o /tmp/demo-clang examples/hosted/demo.c
